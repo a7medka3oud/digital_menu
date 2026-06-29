@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#171512" />
+    <title>Smart Digital Menu</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div id="app" v-cloak :style="themeVars">
+      <header class="topbar">
+        <a class="brand" href="#menu" aria-label="Back to the Menu">
+          <img class="brand-logo" :src="data.brand.logo" :alt="data.brand.name" />
+          <span class="brand-copy">
+            <strong>{{ data.brand.name }}</strong>
+            <small>{{ data.brand.tagline }}</small>
+          </span>
+        </a>
+
+        <nav class="top-actions" aria-label="Menu Procedures">
+          <button class="icon-button" type="button" @click="toggleCart" :aria-pressed="showCart">
+            <span aria-hidden="true">□</span>
+            <span>{{ orderLines.length }}</span>
+          </button>
+          <button class="mode-button" type="button" @click="editMode = !editMode">
+            <span aria-hidden="true">{{ editMode ? '×' : '✎' }}</span>
+            <span>{{ editMode ? 'Close Edit': 'Edit Menu' }}</span>
+          </button>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero" :style="{ backgroundImage: heroBackground }">
+          <div class="hero-shade"></div>
+          <div class="hero-content">
+            <p class="kicker">{{ data.brand.kicker }}</p>
+            <h1>{{ data.brand.headline }}</h1>
+            <p class="hero-lead">{{ data.brand.description }}</p>
+            <div class="hero-meta" aria-label="Restaurant Information">
+              <span>{{ data.brand.location }}</span>
+              <span>{{ data.brand.phone }}</span>
+              <span>Preparation {{ estimatedPrep }} minute</span>'Close Edit': 'Edit Menu'
+            </div>
+          </div>
+        </section>
+
+        <section class="control-band" id="menu">
+          <div class="container controls">
+            <label class="search-box">
+              <span aria-hidden="true">⌕</span>
+              <input v-model.trim="search" type="search" placeholder="Looking for burgers, brisket, strips..." />
+            </label>
+            <div class="quick-total">
+              <span>Total</span>
+              <strong>{{ formatPrice(total) }}</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="container category-row" aria-label="Sections">
+          <button
+            v-for="category in categoriesWithAll"
+            :key="category.id"
+            type="button"
+            class="category-pill"
+            :class="{ active: activeCategory === category.id }"
+            @click="activeCategory = category.id"
+          >
+            <span>{{ category.name }}</span>
+            <small>{{ category.count }}</small>
+          </button>
+        </section>
+
+        <section class="menu-band">
+          <div class="container menu-layout" :class="{ 'cart-open': showCart }">
+            <div class="items-grid" aria-live="polite">
+              <article
+                v-for="item in filteredItems"
+                :key="item.id"
+                class="menu-card"
+                :class="{ unavailable: !item.available }"
+              >
+                <div
+                  class="item-photo"
+                  :style="photoStyle(item)"
+                  role="img"
+                  :aria-label="item.name"
+                >
+                  <span v-if="item.popular" class="item-badge">Most Popular</span>
+                </div>
+                <div class="item-body">
+                  <div class="item-heading">
+                    <h2>{{ item.name }}</h2>
+                    <strong>{{ formatPrice(item.price) }}</strong>
+                  </div>
+                  <p>{{ item.description }}</p>
+                  <div class="item-foot">
+                    <span>{{ categoryName(item.categoryId) }}</span>
+                    <button
+                      type="button"
+                      class="add-button"
+                      :disabled="!item.available"
+                      @click="addToCart(item)"
+                    >
+                      <span aria-hidden="true">＋</span>
+                      <span>{{ item.available ? 'Add': 'Not available' }}</span>
+                    </button>
+                  </div>
+                </div>
+              </article>
+
+              <div v-if="!filteredItems.length" class="empty-state">
+                <strong>No matching results</strong>
+                <button type="button" @click="clearFilters">View the entire menu</button>
+              </div>
+            </div>
+
+            <aside class="order-panel" :class="{ visible: showCart }" aria-label="Application Summary">
+              <div class="panel-heading">
+                <div>
+                  <span>Your request</span>
+                  <strong>{{ orderCount }} Category</strong>
+                </div>
+                <button class="icon-button small" type="button" @click="showCart = false" aria-label= "Close">
+                  <span aria-hidden="true">×</span>
+                </button>
+              </div>
+
+              <div v-if="!orderLines.length" class="order-empty">
+                <strong>Choose your items</strong>
+                <p>The total will appear here immediately.</p>
+              </div>
+
+              <div v-else class="order-lines">
+                <div v-for="line in orderLines" :key="line.item.id" class="order-line">
+                  <div>
+                    <strong>{{ line.item.name }}</strong>
+                    <span>{{ formatPrice(line.item.price) }}</span>
+                  </div>
+                  <div class="quantity">
+                    <button type="button" @click="decrement(line.item.id)" aria-label="Reduce">−</button>
+                    <span>{{ line.quantity }}</span>
+                    <button type="button" @click="increment(line.item.id)" aria-label="Increase">＋</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="totals">
+                <div>
+                  <span>Total</span>
+                  <strong>{{ formatPrice(subtotal) }}</strong>
+                </div>
+                <div>
+                  <span>Tax  {{ data.settings.taxRate }}%</span>
+                  <strong>{{ formatPrice(tax) }}</strong>
+                </div>
+                <div class="grand-total">
+                  <span>Total</span>
+                  <strong>{{ formatPrice(total) }}</strong>
+                </div>
+              </div>
+
+              <button class="checkout-button" type="button" :disabled="!orderLines.length" @click="copyOrder">
+                <span aria-hidden="true">⧉</span>
+                <span>{{ copied ? 'Order copied': 'Copy order' }}</span>
+              </button>
+            </aside>
+          </div>
+        </section>
+
+        <section v-if="editMode" class="editor-band" id="editor">
+          <div class="container editor-layout">
+            <div class="editor-panel identity-panel">
+              <div class="section-title">
+                <span>Identity</span>
+                <strong>The Logo and Colors</strong>
+              </div>
+              <div class="form-grid">
+                <label>
+                  <span>Restaurant Name</span>
+                  <input v-model="data.brand.name" type="text" />
+                </label>
+                <label>
+                  <span>Tagline</span>
+                  <input v-model="data.brand.tagline" type="text" />
+                </label>
+                <label>
+                  <span>Main Heading</span>
+                  <input v-model="data.brand.headline" type="text" />
+                </label>
+                <label>
+                  <span>Description</span>
+                  <input v-model="data.brand.description" type="text" />
+                </label>
+                <label>
+                  <span>Location</span>
+                  <input v-model="data.brand.location" type="text" />
+                </label>
+                <label>
+                  <span>Phone</span>
+                  <input v-model="data.brand.phone" type="text" />
+                </label>
+                <label>
+                  <span>Currency</span>
+                  <input v-model="data.settings.currency" type="text" />
+                </label>
+                <label>
+                  <span>Tax %</span>
+                  <input v-model.number="data.settings.taxRate" type="number" min="0" step="0.5" />
+                </label>
+              </div>
+
+              <div class="swatch-grid">
+                <label>
+                  <span>Primary</span>
+                  <input v-model="data.theme.primary" type="color" />
+                </label>
+                <label>
+                  <span>Accent</span>
+                  <input v-model="data.theme.accent" type="color" />
+                </label>
+                <label>
+                  <span>Gold</span>
+                  <input v-model="data.theme.gold" type="color" />
+                </label>
+                <label>
+                  <span>Background</span>
+                  <input v-model="data.theme.background" type="color" />
+                </label>
+              </div>
+
+              <div class="upload-row">
+                <label class="file-button">
+                  <input type="file" accept="image/*" @change="uploadLogo" />
+                  <span aria-hidden="true">⇪</span>
+                  <span>Change Logo</span>
+                </label>
+                <label class="file-button">
+                  <input type="file" accept="image/*" @change="uploadHero" />
+                  <span aria-hidden="true">⇪</span>
+                  <span>Change Image</span>
+                </label>
+              </div>
+              </div>
+
+              <div class="editor-panel">
+                <div class="section-title">
+                  <span>Categories</span>
+                  <strong>Edit Names & Order</strong>
+                </div>
+                <div class="category-editor">
+                  <div v-for="category in data.categories" :key="category.id" class="category-edit-row">
+                    <input v-model="category.name" type="text" />
+                    <input v-model="category.shortName" type="text" />
+                    <input v-model="category.accent" type="color" />
+                    <button type="button" class="ghost-button" @click="removeCategory(category.id)">Delete</button>
+                  </div>
+                </div>
+                <button class="secondary-button" type="button" @click="addCategory">
+                  <span aria-hidden="true">＋</span>
+                  <span>Add Category</span>
+                </button>
+              </div>
+
+              <div class="editor-panel menu-editor-panel">
+                <div class="section-title">
+                  <span>Menu Items</span>
+                  <strong>Edit Prices & Names</strong>
+                </div>
+
+                <div class="item-editor-head">
+                  <button class="secondary-button" type="button" @click="addItem">
+                    <span aria-hidden="true">＋</span>
+                    <span>Add Item</span>
+                  </button>
+                  <div class="save-state">{{ saveState }}</div>
+                </div>
+
+                <div class="item-editor">
+                  <div v-for="item in data.items" :key="item.id" class="item-edit-row">
+                    <input v-model="item.name" type="text" aria-label="Item Name" />
+                    <input v-model="item.description" type="text" aria-label="Item Description" />
+                    <select v-model="item.categoryId" aria-label="Category">
+                      <option v-for="category in data.categories" :key="category.id" :value="category.id">
+                        {{ category.name }}
+                      </option>
+                    </select>
+                    <input v-model.number="item.price" type="number" min="0" step="0.5" aria-label="Price" />
+                    <label class="toggle">
+                      <input v-model="item.available" type="checkbox" />
+                      <span>Available</span>
+                    </label>
+                    <label class="toggle">
+                      <input v-model="item.popular" type="checkbox" />
+                      <span>Popular</span>
+                    </label>
+                    <button type="button" class="ghost-button" @click="removeItem(item.id)">Delete</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="editor-actions">
+                <button class="secondary-button" type="button" @click="exportData">
+                  <span aria-hidden="true">↓</span>
+                  <span>Export JSON</span>
+                </button>
+                <label class="secondary-button file-button inline">
+                  <input type="file" accept="application/json" @change="importData" />
+                  <span aria-hidden="true">↑</span>
+                  <span>Import JSON</span>
+                </label>
+                <button class="danger-button" type="button" @click="resetData">
+                  <span aria-hidden="true">↺</span>
+                  <span>Restore Default</span>
+                </button>
+              </div>
+              </div>
+              </section>
+              </main>
+              </div>
+
+    <script src="src/vue.global.prod.js"></script>
+    <script src="src/menu-data.js"></script>
+    <script src="src/main.js"></script>
+  </body>
+</html>

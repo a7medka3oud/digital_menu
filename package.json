@@ -1,0 +1,9 @@
+{
+  "name": "smart-burger-menu",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vue digital restaurant menu with editable prices, identity and theme.",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
